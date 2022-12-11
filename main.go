@@ -122,7 +122,7 @@ func GetData[T WeatherResponse | TideResponse](url string, data *T) error {
 	return nil
 }
 
-func HandleLambdaEvent() LambdaResponse {
+func HandleLambdaEvent() (LambdaResponse, error) {
 	currentTime := time.Now().UTC()
 	weatherIndex := 0
 
@@ -149,14 +149,14 @@ func HandleLambdaEvent() LambdaResponse {
 	if err := GetData(tideUrl, &tideData); err != nil {
 		return LambdaResponse{
 			Message: "Could not fetch tide data",
-		}
+		}, nil
 	}
 	log.Println("Tide response fetched successfully")
 	var weatherData WeatherResponse
 	if err := GetData("https://wttr.in/Mortlake?format=j1", &weatherData); err != nil {
 		return LambdaResponse{
 			Message: "Could not fetch weather data",
-		}
+		}, nil
 	}
 	log.Println("Weather response fetched successfully")
 
@@ -164,7 +164,7 @@ func HandleLambdaEvent() LambdaResponse {
 	for i, tide := range tideData.Table["0"].Rows[strconv.Itoa(currentTime.Day()-1)] {
 		parsed, err := time.Parse("2006-01-02 15:04", currentTime.Format("2006-01-02 ")+tide.Time[:2]+":"+tide.Time[2:])
 		if err != nil {
-			return LambdaResponse{Message: "Parser failure"}
+			return LambdaResponse{Message: "Parser failure"}, nil
 		}
 
 		if tide.Type == 0 {
@@ -179,11 +179,11 @@ func HandleLambdaEvent() LambdaResponse {
 	for i, weather := range weatherData.Weather[weatherIndex].Hourly {
 		hourTime, err := strconv.ParseInt(weather.Time, 10, 16)
 		if err != nil {
-			return LambdaResponse{Message: "Parser failure"}
+			return LambdaResponse{Message: "Parser failure"}, nil
 		}
 		currTime, err := strconv.ParseInt(currentTime.Format("1504"), 10, 16)
 		if err != nil {
-			return LambdaResponse{Message: "Parser failure"}
+			return LambdaResponse{Message: "Parser failure"}, nil
 		}
 
 		if currTime >= hourTime {
@@ -192,11 +192,11 @@ func HandleLambdaEvent() LambdaResponse {
 
 		weatherType, err := strconv.ParseInt(weather.WeatherCode, 10, 16)
 		if err != nil {
-			return LambdaResponse{Message: "Parser failure"}
+			return LambdaResponse{Message: "Parser failure"}, nil
 		}
 		temperature, err := strconv.ParseInt(weather.TempC, 10, 16)
 		if err != nil {
-			return LambdaResponse{Message: "Parser failure"}
+			return LambdaResponse{Message: "Parser failure"}, nil
 		}
 
 		dayWeather[i] = WeatherPeriodData{
@@ -207,7 +207,7 @@ func HandleLambdaEvent() LambdaResponse {
 
 	currWindSpeed, err := strconv.ParseInt(currentWeather.WindSpeedKmph, 10, 16)
 	if err != nil {
-		return LambdaResponse{Message: "Parser failure"}
+		return LambdaResponse{Message: "Parser failure"}, nil
 	}
 
 	return LambdaResponse{
@@ -221,7 +221,8 @@ func HandleLambdaEvent() LambdaResponse {
 			Strength:  WindSpeedText(int16(currWindSpeed)),
 		},
 		WeatherPeriods: dayWeather,
-	}
+		Message:        "",
+	}, nil
 }
 
 func main() {
