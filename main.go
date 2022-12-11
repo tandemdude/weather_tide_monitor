@@ -68,6 +68,7 @@ type WindData struct {
 }
 
 type LambdaResponse struct {
+	Date           string              `json:"date"`
 	WeatherPeriods []WeatherPeriodData `json:"weather_periods"`
 	Tides          TidesData           `json:"tides"`
 	Wind           WindData            `json:"wind"`
@@ -122,6 +123,13 @@ func GetData[T WeatherResponse | TideResponse](url string, data *T) error {
 
 func HandleLambdaEvent() (LambdaResponse, error) {
 	currentTime := time.Now().UTC()
+	weatherIndex := 0
+
+	if currentTime.Hour() >= 12 {
+		currentTime = currentTime.AddDate(0, 0, 1)
+		currentTime = currentTime.Add(time.Hour * time.Duration(currentTime.Hour()) * -1)
+		weatherIndex = 1
+	}
 
 	lowTideOffset, err := strconv.Atoi(os.Getenv("LOW_TIDE_OFFSET"))
 	if err != nil {
@@ -131,7 +139,6 @@ func HandleLambdaEvent() (LambdaResponse, error) {
 	if err != nil {
 		log.Fatalln(err)
 	}
-
 	tideUrl := fmt.Sprintf(
 		"https://tidepredictions.pla.co.uk/gauge_data/0113/%s/%s/%s/0/1/",
 		currentTime.Format("2006"), currentTime.Format("01"), currentTime.Format("02"),
@@ -163,8 +170,8 @@ func HandleLambdaEvent() (LambdaResponse, error) {
 	}
 
 	var currentWeather HourlyWeather
-	dayWeather := make([]WeatherPeriodData, len(weatherData.Weather[0].Hourly))
-	for i, weather := range weatherData.Weather[0].Hourly {
+	dayWeather := make([]WeatherPeriodData, len(weatherData.Weather[weatherIndex].Hourly))
+	for i, weather := range weatherData.Weather[weatherIndex].Hourly {
 		hourTime, err := strconv.ParseInt(weather.Time, 10, 16)
 		if err != nil {
 			return LambdaResponse{}, errors.New("could not parse weather time")
@@ -199,6 +206,7 @@ func HandleLambdaEvent() (LambdaResponse, error) {
 	}
 
 	return LambdaResponse{
+		Date: currentTime.Format("2006-01-02"),
 		Tides: TidesData{
 			FirstTide: tideData.Table["0"].Rows[strconv.Itoa(currentTime.Day()-1)][0].Type,
 			Times:     tideTimes,
